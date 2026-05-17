@@ -47,8 +47,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Admins and Teachers: Academic management
     Route::middleware('role:admin,teacher')->group(function () {
         Route::apiResource('students', StudentController::class);
+        Route::post('students/assign-class', [StudentController::class, 'assignClass']);
         Route::apiResource('classes', ClassController::class);
         Route::apiResource('courses', CourseController::class);
+        Route::get('courses/{id}/roster', [CourseController::class, 'roster']);
         Route::apiResource('enrollments', EnrollmentController::class)->except(['show', 'update']);
         Route::post('/attendance/batch', [AttendanceController::class, 'batchStore']);
         Route::apiResource('attendance', AttendanceController::class)->except(['show', 'destroy']);

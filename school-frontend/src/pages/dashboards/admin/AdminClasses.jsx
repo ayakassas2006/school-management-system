@@ -5,18 +5,19 @@ import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { BookOpen, Users, Clock, MoreHorizontal, Plus, GraduationCap, Trash2, Edit } from 'lucide-react';
 import { useToast } from '../../../components/ui/Toast';
-import { coursesApi, usersApi } from '../../../services/api';
+import { coursesApi, usersApi, classesApi } from '../../../services/api';
 
 export default function AdminClasses() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newCourse, setNewCourse] = useState({ class_name: '', name: '', duration: '', teacher_id: '', capacity: 30, schedule: 'Mon, Wed 09:00 AM' });
+  const [newCourse, setNewCourse] = useState({ class_id: '', name: '', duration: '', teacher_id: '', capacity: 30, schedule: 'Mon, Wed 09:00 AM' });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingCourseId, setEditingCourseId] = useState(null);
   const [editCourse, setEditCourse] = useState({ class_name: '', name: '', duration: '', teacher_id: '', capacity: 30, schedule: 'Mon, Wed 09:00 AM' });
   const [selectedClassDetails, setSelectedClassDetails] = useState(null);
   const [selectedClassRoster, setSelectedClassRoster] = useState(null);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
 
   // Fetch all courses using React Query
   const { data: courses = [], isLoading: loading } = useQuery({
@@ -36,6 +37,22 @@ export default function AdminClasses() {
     queryKey: ['teachers'],
     queryFn: async () => {
       const res = await usersApi.getAll({ role: 'teacher' });
+      return res.data || [];
+    }
+  });
+
+  const { data: studentsList = [] } = useQuery({
+    queryKey: ['students'],
+    queryFn: async () => {
+      const res = await usersApi.getAll({ role: 'student' });
+      return res.data || [];
+    }
+  });
+
+  const { data: classesList = [] } = useQuery({
+    queryKey: ['classes'],
+    queryFn: async () => {
+      const res = await classesApi.getAll();
       return res.data || [];
     }
   });
@@ -66,19 +83,41 @@ export default function AdminClasses() {
   });
 
   const removeStudent = useMutation({
-    mutationFn: async (studentId) => {
-      return await fetch(`http://localhost:8000/api/courses/${selectedClassRoster.id}/remove-student`, {
-        method: 'POST',
+    mutationFn: async (enrollmentId) => {
+      return await fetch(`http://localhost:8000/api/enrollments/${enrollmentId}`, {
+        method: 'DELETE',
         headers: { 
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}` 
-        },
-        body: JSON.stringify({ studentId })
+        }
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['roster', selectedClassRoster?.id]);
       success('Student removed from course.');
+    }
+  });
+
+  const addStudent = useMutation({
+    mutationFn: async (payload) => {
+      return await fetch(`http://localhost:8000/api/enrollments`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}` 
+        },
+        body: JSON.stringify({
+          student_id: payload.student_id,
+          course_id: selectedClassRoster.id
+        })
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['roster', selectedClassRoster?.id]);
+      success('Student added to roster.');
+      setSelectedStudentId('');
+    },
+    onError: () => {
+      error('Failed to add student to roster.');
     }
   });
 
@@ -204,15 +243,18 @@ export default function AdminClasses() {
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                 <div>
-                    <label className="form-label">Class Name</label>
-                    <input 
-                      type="text" 
-                      required 
+                    <label className="form-label">Group / Class</label>
+                    <select 
                       className="form-input" 
-                      placeholder="e.g. 10th Grade"
-                      value={newCourse.class_name}
-                      onChange={e => setNewCourse({...newCourse, class_name: e.target.value})}
-                    />
+                      required
+                      value={newCourse.class_id}
+                      onChange={e => setNewCourse({...newCourse, class_id: e.target.value})}
+                    >
+                      <option value="">Select Class</option>
+                      {classesList.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
                 </div>
                 <div>
                     <label className="form-label">Course Name</label>
@@ -272,10 +314,9 @@ export default function AdminClasses() {
                 <div>
                     <label className="form-label">Default Schedule</label>
                     <input 
-                      type="text" 
+                      type="datetime-local" 
                       required 
                       className="form-input" 
-                      placeholder="e.g. Mon, Wed 09:00 AM"
                       value={newCourse.schedule}
                       onChange={e => setNewCourse({...newCourse, schedule: e.target.value})}
                     />
@@ -368,10 +409,9 @@ export default function AdminClasses() {
                 <div>
                     <label className="form-label">Default Schedule</label>
                     <input 
-                      type="text" 
+                      type="datetime-local" 
                       required 
                       className="form-input" 
-                      placeholder="e.g. Mon, Wed 09:00 AM"
                       value={editCourse.schedule}
                       onChange={e => setEditCourse({...editCourse, schedule: e.target.value})}
                     />
@@ -414,13 +454,61 @@ export default function AdminClasses() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {roster.map(student => (
               <div key={student.id} style={{ padding: '1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontWeight: '600' }}>{student.name}</div>
-                <Button variant="outline" size="sm" onClick={() => removeStudent.mutate(student.id)}>Remove</Button>
+                <div style={{ fontWeight: '600' }}>{student.user?.name || student.name}</div>
+                <Button variant="outline" size="sm" onClick={() => removeStudent.mutate(student.enrollment_id)}>Remove</Button>
               </div>
             ))}
             {roster.length === 0 && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No students enrolled.</div>}
             
-            <Button variant="primary" style={{ marginTop: '1rem' }} onClick={() => success('Add student modal would open here.')}>+ Add Student</Button>
+            {/* Add Student Form */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                addStudent.mutate({ 
+                  student_id: selectedStudentId, 
+                  class_id: selectedClassRoster.class_id || selectedClassRoster.id
+                });
+              }} 
+              style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}
+            >
+              <label className="form-label">Add Student to Roster</label>
+              
+              <input 
+                type="hidden" 
+                name="class_id" 
+                value={selectedClassRoster.class_id || selectedClassRoster.id || ''} 
+              />
+              
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <select 
+                  className="form-input" 
+                  value={selectedStudentId} 
+                  onChange={e => setSelectedStudentId(e.target.value)}
+                  required
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Select a Student</option>
+                  {studentsList
+                    .filter(s => {
+                      const classId = s.class_id || s.profile?.class_id;
+                      const studentId = s.id || s.profile?.id;
+                      const enrolledStudentIds = roster.map(r => r.id);
+                      return classId === selectedClassRoster.class_id && !enrolledStudentIds.includes(studentId);
+                    })
+                    .map(s => (
+                      <option key={s.id} value={s.profile?.id || s.id}>{s.name}</option>
+                    ))}
+                </select>
+                
+                <Button 
+                  variant="primary" 
+                  type="submit" 
+                  disabled={addStudent.isLoading || !selectedStudentId}
+                >
+                  {addStudent.isLoading ? 'Adding...' : 'Add'}
+                </Button>
+              </div>
+            </form>
           </div>
         )}
       </Modal>

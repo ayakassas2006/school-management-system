@@ -15,7 +15,7 @@ class CourseController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Course::with(['classRoom', 'assignments', 'teacher.user']);
+        $query = Course::with(['classRoom', 'assignments', 'teacher.user'])->withCount('enrollments');
 
         if ($user && $user->role === 'teacher') {
             $teacher = \App\Models\Teacher::where('user_id', $user->id)->first();
@@ -40,7 +40,7 @@ class CourseController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'class_name' => 'required|string',
+            'class_id' => 'required|exists:classes,id',
             'description' => 'nullable|string',
             'instructor' => 'nullable|string',
             'capacity' => 'nullable|integer',
@@ -53,20 +53,7 @@ class CourseController extends Controller
             return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
         }
 
-        $class = \App\Models\ClassRoom::firstOrCreate(
-            ['name' => $request->class_name],
-            ['teacher_id' => $request->teacher_id]
-        );
-        
-        // If the class exists but has no teacher_id, let's assign it
-        if (!$class->teacher_id && $request->teacher_id) {
-            $class->update(['teacher_id' => $request->teacher_id]);
-        }
-        
-        $data = $request->all();
-        $data['class_id'] = $class->id;
-        
-        $course = Course::create($data);
+        $course = Course::create($request->all());
 
         return response()->json(['status' => 'success', 'data' => $course, 'message' => 'Course created and linked to class.'], 201);
     }
@@ -95,7 +82,7 @@ class CourseController extends Controller
 
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
-            'class_name' => 'nullable|string',
+            'class_id' => 'nullable|exists:classes,id',
             'description' => 'nullable|string',
             'instructor' => 'nullable|string',
             'capacity' => 'nullable|integer',
@@ -108,17 +95,7 @@ class CourseController extends Controller
             return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
         }
 
-        $data = $request->all();
-
-        if ($request->filled('class_name')) {
-            $class = \App\Models\ClassRoom::firstOrCreate(['name' => $request->class_name]);
-            if ($request->filled('teacher_id')) {
-                $class->update(['teacher_id' => $request->teacher_id]);
-            }
-            $data['class_id'] = $class->id;
-        }
-
-        $course->update($data);
+        $course->update($request->all());
 
         return response()->json(['status' => 'success', 'data' => $course, 'message' => 'Course updated.']);
     }
@@ -134,5 +111,31 @@ class CourseController extends Controller
         }
         $course->delete();
         return response()->json(['status' => 'success', 'message' => 'Course deleted.']);
+    }
+
+    /**
+     * Fetch roster for a specific course.
+     */
+    public function roster($id)
+    {
+        $course = Course::find($id);
+        if (!$course) {
+            return response()->json(['status' => 'error', 'message' => 'Course not found.'], 404);
+        }
+
+        $enrollments = \App\Models\Enrollment::with('student.user')
+            ->where('course_id', $id)
+            ->get();
+            
+        $students = $enrollments->map(function($e) {
+            if ($e->student) {
+                $student = $e->student;
+                $student->enrollment_id = $e->id; // Attach for frontend use
+                return $student;
+            }
+            return null;
+        })->filter()->values();
+
+        return response()->json($students);
     }
 }

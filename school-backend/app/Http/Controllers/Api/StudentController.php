@@ -99,4 +99,31 @@ class StudentController extends Controller
         }
         return response()->json(['status' => 'success', 'message' => 'Student record deleted.']);
     }
+
+    public function assignClass(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'student_id' => 'required|exists:students,id',
+            'class_id' => 'required|exists:classes,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $student = Student::findOrFail($request->student_id);
+            $student->update(['class_id' => $request->class_id]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Student successfully added to the class roster.'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to assign student: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

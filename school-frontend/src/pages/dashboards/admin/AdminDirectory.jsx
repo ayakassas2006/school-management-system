@@ -24,7 +24,7 @@ export default function AdminDirectory() {
     phone: '',
     department: '',
     specialization: '',
-    class_id: '',
+    class_ids: [],
     class_id: '',
     parent_id: '',
     student_id: '',
@@ -107,14 +107,15 @@ export default function AdminDirectory() {
         password_confirmation: newUser.password_confirmation,
         role: newUser.role,
         specialization: newUser.role === 'teacher' ? newUser.specialization : undefined,
-        class_id: (newUser.role === 'student' || newUser.role === 'teacher') ? newUser.class_id : undefined,
+        class_ids: newUser.role === 'teacher' ? newUser.class_ids : undefined,
+        class_id: newUser.role === 'student' ? newUser.class_id : undefined,
         parent_id: newUser.role === 'student' ? newUser.parent_id : undefined,
         student_id: newUser.role === 'parent' ? newUser.student_id : undefined,
       });
 
       success(`${newUser.name} has been added and saved to the database!`);
       setIsModalOpen(false);
-      setNewUser({ name: '', email: '', password: 'password', password_confirmation: 'password', role: '', phone: '', department: '', specialization: '', class_id: '', parent_id: '', student_id: '' });
+      setNewUser({ name: '', email: '', password: 'password', password_confirmation: 'password', role: '', phone: '', department: '', specialization: '', class_ids: [], class_id: '', parent_id: '', student_id: '' });
 
       // Refresh the list to include the new user from the DB
       await fetchUsers();
@@ -363,13 +364,35 @@ export default function AdminDirectory() {
                 <input type="text" className="form-input" value={newUser.specialization} onChange={e => setNewUser({ ...newUser, specialization: e.target.value })} placeholder="e.g. Mathematics, Physics" />
               </div>
               <div>
-                <label className="form-label">Assign Class</label>
-                <select className="form-input" value={newUser.class_id} onChange={e => setNewUser({ ...newUser, class_id: e.target.value })}>
-                  <option value="">Select Class</option>
+                <label className="form-label">Assign Classes</label>
+                <div style={{ 
+                  border: '1px solid var(--color-border)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '0.5rem', 
+                  maxHeight: '120px', 
+                  overflowY: 'auto', 
+                  background: 'var(--color-bg)' 
+                }}>
                   {classesList.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.85rem', color: 'var(--color-text-body)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        value={c.id}
+                        checked={newUser.class_ids.includes(c.id.toString())}
+                        onChange={e => {
+                          const id = e.target.value;
+                          const currentIds = newUser.class_ids;
+                          if (e.target.checked) {
+                            setNewUser({ ...newUser, class_ids: [...currentIds, id] });
+                          } else {
+                            setNewUser({ ...newUser, class_ids: currentIds.filter(x => x !== id) });
+                          }
+                        }}
+                      />
+                      {c.name}
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
           )}
