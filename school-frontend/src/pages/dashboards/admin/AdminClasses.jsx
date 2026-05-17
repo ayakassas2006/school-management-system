@@ -11,7 +11,9 @@ export default function AdminClasses() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [newCourse, setNewCourse] = useState({ class_id: '', name: '', duration: '', teacher_id: '', capacity: 30, schedule: 'Mon, Wed 09:00 AM' });
+  const [newClass, setNewClass] = useState({ name: '', teacher_id: '' });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingCourseId, setEditingCourseId] = useState(null);
   const [editCourse, setEditCourse] = useState({ class_name: '', name: '', duration: '', teacher_id: '', capacity: 30, schedule: 'Mon, Wed 09:00 AM' });
@@ -155,13 +157,32 @@ export default function AdminClasses() {
     }
   };
 
+  const handleCreateClass = async (e) => {
+    e.preventDefault();
+    try {
+      await classesApi.create(newClass);
+      
+      queryClient.invalidateQueries(['classes']);
+      setIsClassModalOpen(false);
+      setNewClass({ name: '', teacher_id: '' });
+      success(`Class ${newClass.name} has been created successfully.`);
+    } catch (err) {
+      error('Failed to create class. ' + (err?.message || ''));
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '2rem' }}>Class & Course Management</h1>
-        <Button variant="primary" onClick={() => setIsModalOpen(true)}>
-          <Plus size={18} style={{ marginRight: 8 }} /> Create Course
-        </Button>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Button variant="outline" onClick={() => setIsClassModalOpen(true)}>
+            <Plus size={18} style={{ marginRight: 8 }} /> Create Class
+          </Button>
+          <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+            <Plus size={18} style={{ marginRight: 8 }} /> Create Course
+          </Button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
@@ -185,7 +206,7 @@ export default function AdminClasses() {
                  <button onClick={() => {
                     setEditingCourseId(course.id);
                     setEditCourse({
-                       class_name: course.classRoom?.name || '',
+                       class_id: course.class_id || '',
                        name: course.name,
                        duration: course.duration || '',
                        teacher_id: course.teacher_id || '',
@@ -225,8 +246,8 @@ export default function AdminClasses() {
             </div>
             
             <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto' }}>
-                <Button variant="outline" size="sm" style={{ flex: 1, fontWeight: '600' }} onClick={() => setSelectedClassDetails(course)}>View Details</Button>
-                <Button variant="outline" size="sm" style={{ flex: 1, fontWeight: '600' }} onClick={() => setSelectedClassRoster(course)}>Manage Roster</Button>
+                <Button variant="primary" size="sm" style={{ flex: 1, fontWeight: '600' }} onClick={() => setSelectedClassDetails(course)}>View Details</Button>
+                <Button variant="primary" size="sm" style={{ flex: 1, fontWeight: '600' }} onClick={() => setSelectedClassRoster(course)}>Show Students</Button>
             </div>
           </Card>
         ))}
@@ -341,15 +362,18 @@ export default function AdminClasses() {
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                 <div>
-                    <label className="form-label">Class Name</label>
-                    <input 
-                      type="text" 
-                      required 
+                    <label className="form-label">Group / Class</label>
+                    <select 
                       className="form-input" 
-                      placeholder="e.g. 10th Grade"
-                      value={editCourse.class_name}
-                      onChange={e => setEditCourse({...editCourse, class_name: e.target.value})}
-                    />
+                      required
+                      value={editCourse.class_id}
+                      onChange={e => setEditCourse({...editCourse, class_id: e.target.value})}
+                    >
+                      <option value="">Select Class</option>
+                      {classesList.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
                 </div>
                 <div>
                     <label className="form-label">Course Name</label>
@@ -448,69 +472,52 @@ export default function AdminClasses() {
         )}
       </Modal>
 
-      {/* Manage Roster Modal */}
-      <Modal isOpen={!!selectedClassRoster} onClose={() => setSelectedClassRoster(null)} title={"Manage Roster: " + selectedClassRoster?.name}>
+      {/* Show Students Modal */}
+      <Modal isOpen={!!selectedClassRoster} onClose={() => setSelectedClassRoster(null)} title={"Students Enrolled in: " + selectedClassRoster?.name}>
         {selectedClassRoster && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {roster.map(student => (
               <div key={student.id} style={{ padding: '1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontWeight: '600' }}>{student.user?.name || student.name}</div>
-                <Button variant="outline" size="sm" onClick={() => removeStudent.mutate(student.enrollment_id)}>Remove</Button>
               </div>
             ))}
             {roster.length === 0 && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No students enrolled.</div>}
-            
-            {/* Add Student Form */}
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                addStudent.mutate({ 
-                  student_id: selectedStudentId, 
-                  class_id: selectedClassRoster.class_id || selectedClassRoster.id
-                });
-              }} 
-              style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}
-            >
-              <label className="form-label">Add Student to Roster</label>
-              
-              <input 
-                type="hidden" 
-                name="class_id" 
-                value={selectedClassRoster.class_id || selectedClassRoster.id || ''} 
-              />
-              
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <select 
-                  className="form-input" 
-                  value={selectedStudentId} 
-                  onChange={e => setSelectedStudentId(e.target.value)}
-                  required
-                  style={{ flex: 1 }}
-                >
-                  <option value="">Select a Student</option>
-                  {studentsList
-                    .filter(s => {
-                      const classId = s.class_id || s.profile?.class_id;
-                      const studentId = s.id || s.profile?.id;
-                      const enrolledStudentIds = roster.map(r => r.id);
-                      return classId === selectedClassRoster.class_id && !enrolledStudentIds.includes(studentId);
-                    })
-                    .map(s => (
-                      <option key={s.id} value={s.profile?.id || s.id}>{s.name}</option>
-                    ))}
-                </select>
-                
-                <Button 
-                  variant="primary" 
-                  type="submit" 
-                  disabled={addStudent.isLoading || !selectedStudentId}
-                >
-                  {addStudent.isLoading ? 'Adding...' : 'Add'}
-                </Button>
-              </div>
-            </form>
           </div>
         )}
+      </Modal>
+
+      {/* Create Class Modal */}
+      <Modal isOpen={isClassModalOpen} onClose={() => setIsClassModalOpen(false)} title="Create New Group/Class">
+        <form onSubmit={handleCreateClass} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div>
+            <label className="form-label">Class Name</label>
+            <input 
+              type="text" 
+              required 
+              className="form-input" 
+              placeholder="e.g. DEV101"
+              value={newClass.name}
+              onChange={e => setNewClass({...newClass, name: e.target.value})}
+            />
+          </div>
+          <div>
+            <label className="form-label">Assign Teacher</label>
+            <select 
+              className="form-input" 
+              value={newClass.teacher_id}
+              onChange={e => setNewClass({...newClass, teacher_id: e.target.value})}
+            >
+              <option value="">Select Teacher</option>
+              {teachersList.map(t => (
+                <option key={t.id} value={t.profile?.id || ''}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+            <Button variant="outline" type="button" onClick={() => setIsClassModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit">Create Class</Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

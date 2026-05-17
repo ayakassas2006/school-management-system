@@ -76,4 +76,16 @@ class NotificationController extends Controller
 
         return response()->json(['status' => 'success', 'message' => 'Notifications marked as read.']);
     }
+
+    /**
+     * Display a listing of activity logs (Admin only).
+     */
+    public function activityLogs()
+    {
+        $logs = \App\Models\ActivityLog::with('user')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json(['status' => 'success', 'data' => $logs]);
+    }
 }

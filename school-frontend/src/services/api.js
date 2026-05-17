@@ -68,7 +68,10 @@ export const usersApi = {
 
 // Students
 export const studentsApi = {
-  getAll: () => request('GET', '/students'),
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request('GET', `/students${query ? '?' + query : ''}`);
+  },
   getById: (id) => request('GET', `/students/${id}`),
   create: (data) => request('POST', '/students', data),
   update: (id, data) => request('PUT', `/students/${id}`, data),

@@ -114,7 +114,7 @@ class CourseController extends Controller
     }
 
     /**
-     * Fetch roster for a specific course.
+     * Display the roster for the specified course (students in the same class).
      */
     public function roster($id)
     {
@@ -123,19 +123,21 @@ class CourseController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Course not found.'], 404);
         }
 
-        $enrollments = \App\Models\Enrollment::with('student.user')
-            ->where('course_id', $id)
-            ->get();
-            
-        $students = $enrollments->map(function($e) {
-            if ($e->student) {
-                $student = $e->student;
-                $student->enrollment_id = $e->id; // Attach for frontend use
-                return $student;
-            }
-            return null;
-        })->filter()->values();
+        if (!$course->class_id) {
+            return response()->json([]); // No class assigned to this course
+        }
 
-        return response()->json($students);
+        $students = \App\Models\Student::where('class_id', $course->class_id)
+            ->with('user')
+            ->get();
+
+        $result = $students->map(function ($student) {
+            return [
+                'id' => $student->id,
+                'name' => $student->user ? $student->user->name : 'Unknown',
+            ];
+        });
+
+        return response()->json($result);
     }
 }

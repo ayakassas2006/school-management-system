@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
-import { Search, Mail, MessageSquare, UserPlus, Trash2 } from 'lucide-react';
+import { Search, Mail, MessageSquare, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { studentsApi } from '../../../services/api';
+import { studentsApi, classesApi } from '../../../services/api';
 import { useToast } from '../../../components/ui/Toast';
 
 // Avatar Fallback Component
@@ -18,23 +18,72 @@ export default function TeacherStudents() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
-  const [filterClass, setFilterClass] = useState('All Classes');
+  const [filterClass, setFilterClass] = useState('');
 
   const { data: students = [], isLoading } = useQuery({
     queryKey: ['teacher-students'],
     queryFn: async () => {
       const res = await studentsApi.getAll();
-      return res.data.map(s => ({
-        name: s.user?.name || 'Unknown',
-        id: `STD-${s.id}`,
-        studentId: s.id,
-        class: s.classRoom?.name || 'Unassigned',
-        grade: 'N/A',
-        lastAttendance: 'N/A',
-        avatarUrl: null
-      }));
+      return res.data.map(s => {
+        const grades = s.grades || [];
+        const avgGrade = grades.length > 0 
+          ? (grades.reduce((sum, g) => sum + parseFloat(g.score), 0) / grades.length).toFixed(1) 
+          : 'N/A';
+          
+        const attendance = s.attendance || [];
+        let lastAttendance = 'N/A';
+        if (attendance.length > 0) {
+          const sortedAttendance = attendance.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+          const lastAtt = sortedAttendance[0].status;
+          lastAttendance = lastAtt ? lastAtt.charAt(0).toUpperCase() + lastAtt.slice(1) : 'N/A';
+        }
+
+        return {
+          name: s.user?.name || 'Unknown',
+          id: `STD-${s.id}`,
+          studentId: s.id,
+          class: s.class_room?.name || 'Unassigned',
+          classId: s.class_id,
+          grade: avgGrade,
+          lastAttendance: lastAttendance,
+          avatarUrl: null
+        };
+      });
     }
   });
+
+  const { data: classesList = [] } = useQuery({
+    queryKey: ['classes-list'],
+    queryFn: async () => {
+      const res = await fetch('http://127.0.0.1:8000/api/classes', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+      });
+      const data = await res.json();
+      return data.data || [];
+    }
+  });
+
+  const handleAssignClass = async (studentId, classId) => {
+    try {
+      const res = await fetch('http://localhost:8000/api/students/assign-class', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({ student_id: studentId, class_id: classId })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        queryClient.invalidateQueries(['teacher-students']);
+        success('Student assigned to class successfully.');
+      } else {
+        showError('Failed to assign student: ' + (data.message || ''));
+      }
+    } catch (err) {
+      showError('Failed to assign student to class.');
+    }
+  };
 
   const deleteStudentMutation = useMutation({
     mutationFn: async (studentId) => {
@@ -49,15 +98,13 @@ export default function TeacherStudents() {
     }
   });
 
-  const filteredStudents = filterClass === 'All Classes' ? students : students.filter(s => s.class === filterClass);
+  const uniqueGroups = [...new Set(students.map(s => s.class))];
+  const filteredStudents = filterClass === '' ? students : students.filter(s => s.class === filterClass);
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '2rem' }}>Student Roster</h1>
-        <Button variant="primary" onClick={() => navigate('/dashboard/teacher/students/add')} style={{ gap: '0.6rem', fontWeight: '700' }}>
-          <UserPlus size={18} /> Register New Student
-        </Button>
       </div>
 
       <Card style={{ padding: 0 }}>
@@ -68,10 +115,10 @@ export default function TeacherStudents() {
               onChange={(e) => setFilterClass(e.target.value)}
               style={{ padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', outline: 'none', background: 'white' }}
             >
-              <option>All Classes</option>
-              <option>Mathematics 10A</option>
-              <option>Physics 11B</option>
-              <option>Advanced Calculus</option>
+              <option value="">Select Group</option>
+              {uniqueGroups.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
             </select>
           </div>
           <div style={{ position: 'relative' }}>
@@ -104,18 +151,18 @@ export default function TeacherStudents() {
                     </div>
                     <div>
                       <div style={{ fontWeight: '600', color: 'var(--color-text-main)' }}>{student.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{student.id}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{student.class}</div>
                     </div>
                   </td>
                   <td style={{ padding: '1.5rem', color: 'var(--color-text-muted)' }}>{student.class}</td>
-                  <td style={{ padding: '1.5rem', fontWeight: '600', color: parseInt(student.grade) > 85 ? 'var(--color-success)' : (parseInt(student.grade) > 70 ? 'var(--color-warning)' : 'var(--color-danger)') }}>
-                    {student.grade}
+                  <td style={{ padding: '1.5rem', fontWeight: '600', color: student.grade === 'N/A' ? 'var(--color-text-muted)' : (parseFloat(student.grade) >= 15 ? 'var(--color-success)' : (parseFloat(student.grade) >= 10 ? 'var(--color-warning)' : 'var(--color-danger)')) }}>
+                    {student.grade !== 'N/A' ? `${student.grade}/20` : 'N/A'}
                   </td>
                   <td style={{ padding: '1.5rem' }}>
                     <span style={{
                       padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600',
-                      background: student.lastAttendance === 'Present' ? 'var(--color-success)20' : 'var(--color-danger)20',
-                      color: student.lastAttendance === 'Present' ? 'var(--color-success)' : 'var(--color-danger)',
+                      background: student.lastAttendance === 'Present' ? 'var(--color-success)20' : (student.lastAttendance === 'N/A' ? 'var(--color-bg)' : 'var(--color-danger)20'),
+                      color: student.lastAttendance === 'Present' ? 'var(--color-success)' : (student.lastAttendance === 'N/A' ? 'var(--color-text-muted)' : 'var(--color-danger)'),
                     }}>
                       {student.lastAttendance}
                     </span>

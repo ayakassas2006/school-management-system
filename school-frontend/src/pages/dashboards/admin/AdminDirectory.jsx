@@ -4,11 +4,12 @@ import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
 import { Search, Plus, MoreVertical, Mail, Phone, UserPlus, RefreshCw, Trash2, Edit } from 'lucide-react';
 import { useToast } from '../../../components/ui/Toast';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usersApi, authApi, classesApi } from '../../../services/api';
 
 export default function AdminDirectory() {
   const { success, error: showError } = useToast();
+  const queryClient = useQueryClient();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
@@ -119,6 +120,7 @@ export default function AdminDirectory() {
 
       // Refresh the list to include the new user from the DB
       await fetchUsers();
+      await queryClient.invalidateQueries({ queryKey: ['classes'] });
     } catch (err) {
       const errorMsg = err?.errors
         ? Object.values(err.errors).flat().join(' ')
@@ -144,14 +146,14 @@ export default function AdminDirectory() {
       }
       if (editUser.role === 'teacher') {
         payload.specialization = editUser.specialization;
-        payload.class_id = editUser.class_id;
+        payload.class_ids = editUser.class_ids;
       }
       if (editUser.role === 'student') {
         payload.class_id = editUser.class_id;
         payload.parent_id = editUser.parent_id;
       }
       if (editUser.role === 'parent') {
-        payload.student_id = editUser.student_id;
+        payload.student_ids = editUser.student_ids;
       }
 
       await usersApi.update(editingUserId, payload);
@@ -161,6 +163,7 @@ export default function AdminDirectory() {
       
       // Refresh the list to include updated user details
       await fetchUsers();
+      await queryClient.invalidateQueries({ queryKey: ['classes'] });
     } catch (err) {
       const errorMsg = err?.errors
         ? Object.values(err.errors).flat().join(' ')
@@ -240,6 +243,7 @@ export default function AdminDirectory() {
               <tr style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>User</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Contact</th>
+                <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Group / Class</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Role</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Joined</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700', textAlign: 'right' }}>Actions</th>
@@ -248,7 +252,7 @@ export default function AdminDirectory() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="5" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <td colSpan="6" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                     <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: '0.5rem' }} />
                     <div>Loading users from database...</div>
                   </td>
@@ -271,6 +275,17 @@ export default function AdminDirectory() {
                       </span>
                     </div>
                   </td>
+                  <td style={{ padding: '1.25rem 2rem', fontSize: '0.875rem', color: 'var(--color-text-main)' }}>
+                    {user.role?.toLowerCase() === 'student' && (
+                      <span>{classesList.find(c => c.id === user.profile?.class_id)?.name || 'N/A'}</span>
+                    )}
+                    {user.role?.toLowerCase() === 'teacher' && (
+                      <span>{user.profile?.classes?.map(c => c.name).join(', ') || 'N/A'}</span>
+                    )}
+                    {user.role?.toLowerCase() !== 'student' && user.role?.toLowerCase() !== 'teacher' && (
+                      <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                    )}
+                  </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <span style={{ padding: '0.3rem 0.9rem', borderRadius: '2rem', fontSize: '0.8rem', fontWeight: '700', background: getRoleColor(user.role) + '22', color: getRoleColor(user.role) }}>
                       {user.role}
@@ -289,9 +304,10 @@ export default function AdminDirectory() {
                           password: '',
                           role: user.role.toLowerCase(),
                           specialization: user.profile?.specialization || '',
-                          class_id: user.role.toLowerCase() === 'teacher' ? (classesList.find(c => c.teacher_id === user.profile?.id)?.id || '') : (user.profile?.class_id || ''),
+                          class_id: user.role.toLowerCase() === 'student' ? (user.profile?.class_id || '') : '',
+                          class_ids: user.role.toLowerCase() === 'teacher' ? (user.profile?.classes?.map(c => c.id.toString()) || []) : [],
                           parent_id: user.profile?.parent_id || '',
-                          student_id: user.role.toLowerCase() === 'parent' ? (studentsList.find(s => s.profile?.parent_id === user.profile?.id)?.profile?.id || '') : '',
+                          student_ids: user.role.toLowerCase() === 'parent' ? studentsList.filter(s => s.profile?.parent_id === user.profile?.id).map(s => s.profile?.id?.toString() || '') : [],
                         });
                         setIsEditModalOpen(true);
                       }}
@@ -310,7 +326,7 @@ export default function AdminDirectory() {
               ))}
               {!loading && filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan="5" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <td colSpan="6" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                     No users found matching your criteria.
                   </td>
                 </tr>
@@ -489,13 +505,35 @@ export default function AdminDirectory() {
                 <input type="text" className="form-input" value={editUser.specialization} onChange={e => setEditUser({ ...editUser, specialization: e.target.value })} placeholder="e.g. Mathematics, Physics" />
               </div>
               <div>
-                <label className="form-label">Assign Class</label>
-                <select className="form-input" value={editUser.class_id} onChange={e => setEditUser({ ...editUser, class_id: e.target.value })}>
-                  <option value="">Select Class</option>
+                <label className="form-label">Assign Classes</label>
+                <div style={{ 
+                  border: '1px solid var(--color-border)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '0.5rem', 
+                  maxHeight: '120px', 
+                  overflowY: 'auto', 
+                  background: 'var(--color-bg)' 
+                }}>
                   {classesList.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.85rem', color: 'var(--color-text-body)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        value={c.id}
+                        checked={editUser.class_ids?.includes(c.id.toString())}
+                        onChange={e => {
+                          const id = e.target.value;
+                          const currentIds = editUser.class_ids || [];
+                          if (e.target.checked) {
+                            setEditUser({ ...editUser, class_ids: [...currentIds, id] });
+                          } else {
+                            setEditUser({ ...editUser, class_ids: currentIds.filter(x => x !== id) });
+                          }
+                        }}
+                      />
+                      {c.name}
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
           )}
@@ -525,13 +563,35 @@ export default function AdminDirectory() {
 
           {editUser.role === 'parent' && (
             <div>
-              <label className="form-label">Select Child (leur enfant)</label>
-              <select className="form-input" value={editUser.student_id} onChange={e => setEditUser({ ...editUser, student_id: e.target.value })}>
-                <option value="">Select Child</option>
+              <label className="form-label">Select Children</label>
+              <div style={{ 
+                border: '1px solid var(--color-border)', 
+                borderRadius: 'var(--radius-md)', 
+                padding: '0.5rem', 
+                maxHeight: '120px', 
+                overflowY: 'auto', 
+                background: 'var(--color-bg)' 
+              }}>
                 {studentsList.map(s => (
-                  <option key={s.id} value={s.profile?.id || ''}>{s.name}</option>
+                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.85rem', color: 'var(--color-text-body)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      value={s.profile?.id || ''}
+                      checked={editUser.student_ids?.includes(s.profile?.id?.toString() || '')}
+                      onChange={e => {
+                        const id = e.target.value;
+                        const currentIds = editUser.student_ids || [];
+                        if (e.target.checked) {
+                          setEditUser({ ...editUser, student_ids: [...currentIds, id] });
+                        } else {
+                          setEditUser({ ...editUser, student_ids: currentIds.filter(x => x !== id) });
+                        }
+                      }}
+                    />
+                    {s.name}
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
           )}
 

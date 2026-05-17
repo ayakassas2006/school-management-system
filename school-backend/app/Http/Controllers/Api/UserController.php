@@ -16,7 +16,7 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        $query = User::with(['student', 'teacher', 'schoolParent']);
+        $query = User::with(['student', 'teacher.classes', 'schoolParent']);
 
         if ($request->has('role') && $request->role !== 'All') {
             $query->where('role', strtolower($request->role));
@@ -94,12 +94,14 @@ class UserController extends Controller
             if (!empty($teacherData) && $user->teacher) {
                 $user->teacher()->update($teacherData);
             }
-            if ($request->has('class_id') && $user->teacher) {
-                // Clear any existing class assignment for this teacher
-                \App\Models\ClassRoom::where('teacher_id', $user->teacher->id)->update(['teacher_id' => null]);
-                
+            if ($request->has('class_ids') && $user->teacher) {
+                $user->teacher->classes()->sync($request->class_ids);
+            } elseif ($request->has('class_id') && $user->teacher) {
+                // Fallback for single class_id
                 if ($request->filled('class_id')) {
-                    \App\Models\ClassRoom::where('id', $request->class_id)->update(['teacher_id' => $user->teacher->id]);
+                    $user->teacher->classes()->sync([$request->class_id]);
+                } else {
+                    $user->teacher->classes()->sync([]);
                 }
             }
         } elseif ($user->role === 'student') {
@@ -110,8 +112,15 @@ class UserController extends Controller
                 $user->student()->update($studentData);
             }
         } elseif ($user->role === 'parent') {
-            if ($request->has('student_id') && $user->schoolParent) {
-                // Clear any previous assignments if necessary
+            if ($request->has('student_ids') && $user->schoolParent) {
+                // Clear any previous assignments for this parent
+                \App\Models\Student::where('parent_id', $user->schoolParent->id)->update(['parent_id' => null]);
+                
+                if (is_array($request->student_ids) && !empty($request->student_ids)) {
+                    \App\Models\Student::whereIn('id', $request->student_ids)->update(['parent_id' => $user->schoolParent->id]);
+                }
+            } elseif ($request->has('student_id') && $user->schoolParent) {
+                // Fallback for single student_id
                 \App\Models\Student::where('parent_id', $user->schoolParent->id)->update(['parent_id' => null]);
                 
                 if ($request->filled('student_id')) {

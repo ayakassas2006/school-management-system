@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import { Check, X, Clock, HelpCircle, Save, Calendar as CalendarIcon, Users, UserPlus } from 'lucide-react';
@@ -10,8 +10,10 @@ const initialStudents = [];
 
 export default function TeacherAttendance() {
   const { success, error } = useToast();
+  const queryClient = useQueryClient();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [filterClass, setFilterClass] = useState('');
   
   const { data: courses = [] } = useQuery({
     queryKey: ['courses'],
@@ -29,26 +31,42 @@ export default function TeacherAttendance() {
     queryFn: async () => (await studentsApi.getAll()).data
   });
 
-  // Keep track of unsaved attendance in local state
   const [attendanceState, setAttendanceState] = useState({});
 
+  const { data: attendanceRecords = [] } = useQuery({
+    queryKey: ['attendance', date],
+    queryFn: async () => {
+      const res = await fetch(`http://127.0.0.1:8000/api/attendance?date=${date}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+      });
+      const data = await res.json();
+      return data.data || [];
+    }
+  });
+
   useEffect(() => {
-    // Initialize default state for new students
-    const newState = { ...attendanceState };
+    const newState = {};
     rawStudents.forEach(st => {
-      if (!newState[st.id]) {
-        newState[st.id] = { status: 'present', note: '' };
+      newState[st.id] = { status: '', note: '' };
+    });
+    attendanceRecords.forEach(rec => {
+      if (newState[rec.student_id]) {
+        newState[rec.student_id] = { status: rec.status, note: rec.remarks || '' };
       }
     });
     setAttendanceState(newState);
-  }, [rawStudents]);
+  }, [rawStudents, attendanceRecords]);
 
   const students = rawStudents.map(st => ({
     id: st.id,
     name: st.user?.name || 'Unknown Student',
-    status: attendanceState[st.id]?.status || 'present',
+    class: st.class_room?.name || 'Unassigned',
+    status: attendanceState[st.id]?.status ?? '',
     note: attendanceState[st.id]?.note || ''
   }));
+
+  const uniqueGroups = [...new Set(students.map(s => s.class))];
+  const filteredStudents = filterClass === '' ? students : students.filter(s => s.class === filterClass);
 
   const stats = useMemo(() => {
     return {
@@ -69,7 +87,7 @@ export default function TeacherAttendance() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const records = students.map(s => ({
+      const records = filteredStudents.map(s => ({
         student_id: s.id,
         status: s.status,
         remarks: s.note
@@ -77,6 +95,9 @@ export default function TeacherAttendance() {
       return await attendanceApi.batchMark(date, records);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance', date] });
+      queryClient.invalidateQueries({ queryKey: ['teacher-students'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
       success(`Attendance for ${new Date(date).toLocaleDateString()} saved successfully.`);
     },
     onError: (err) => {
@@ -87,6 +108,10 @@ export default function TeacherAttendance() {
   const handleSave = () => {
     if (students.length === 0) {
       error("No students to save attendance for.");
+      return;
+    }
+    if (filteredStudents.some(s => !s.status)) {
+      error("Please mark attendance for all students in the list before saving.");
       return;
     }
     saveMutation.mutate();
@@ -106,17 +131,31 @@ export default function TeacherAttendance() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Attendance Management</h1>
-          <select 
-            value={selectedCourseId} 
-            onChange={e => setSelectedCourseId(e.target.value)}
-            className="form-input" 
-            style={{ width: '300px', padding: '0.5rem 1rem' }}
-          >
-            {courses.map(course => (
-              <option key={course.id} value={course.id}>{course.name}</option>
-            ))}
-            {courses.length === 0 && <option value="">No courses available</option>}
-          </select>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <select 
+              value={selectedCourseId} 
+              onChange={e => setSelectedCourseId(e.target.value)}
+              className="form-input" 
+              style={{ width: '200px', padding: '0.5rem 1rem' }}
+            >
+              {courses.map(course => (
+                <option key={course.id} value={course.id}>{course.name}</option>
+              ))}
+              {courses.length === 0 && <option value="">No courses available</option>}
+            </select>
+            
+            <select 
+              value={filterClass} 
+              onChange={e => setFilterClass(e.target.value)}
+              className="form-input" 
+              style={{ width: '200px', padding: '0.5rem 1rem' }}
+            >
+              <option value="">All Groups</option>
+              {uniqueGroups.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 1rem', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
@@ -174,7 +213,7 @@ export default function TeacherAttendance() {
                 </tr>
                 </thead>
                 <tbody>
-                {students.map((st) => (
+                {filteredStudents.map((st) => (
                     <tr key={st.id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background 0.2s' }}>
                         <td style={{ padding: '1.25rem 2rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

@@ -13,15 +13,13 @@ class StudentController extends Controller
     /**
      * Display a listing of students.
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = auth()->user();
-        $query = Student::with(['user', 'classRoom', 'schoolParent.user']);
+        $query = Student::with(['user', 'classRoom', 'schoolParent.user', 'grades', 'attendance']);
 
-        if ($user && $user->role === 'teacher' && $user->teacher) {
-            $query->whereHas('classRoom', function($q) use ($user) {
-                $q->where('teacher_id', $user->teacher->id);
-            });
+        if ($request->has('class_id') && $request->class_id !== '') {
+            $query->where('class_id', $request->class_id);
         }
 
         $students = $query->get();

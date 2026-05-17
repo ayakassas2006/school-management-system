@@ -42,6 +42,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard/admin-stats', [DashboardController::class, 'adminStats']);
         Route::get('/settings', [SettingController::class, 'index']);
         Route::post('/settings', [SettingController::class, 'update']);
+        Route::get('/activity-logs', [NotificationController::class, 'activityLogs']);
     });
 
     // Admins and Teachers: Academic management
