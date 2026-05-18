@@ -8,10 +8,10 @@ export default function Programs() {
   const navigate = useNavigate();
 
   const programs = [
-    { id: 'early-childhood', title: 'Early Childhood', ageGroup: 'Ages 3-5', desc: 'Fostering curiosity and social skills in a nurturing environment.', icon: <Users size={32} color="#10B981" />, bg: '#ECFDF5', image: 'https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?q=80&w=800&auto=format&fit=crop' },
-    { id: 'elementary', title: 'Elementary School', ageGroup: 'Ages 6-10', desc: 'Building strong foundations in core subjects with project-based learning.', icon: <BookOpen size={32} color="#3B82F6" />, bg: '#eff6ff', image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=800&auto=format&fit=crop' },
-    { id: 'middle-school', title: 'Middle School', ageGroup: 'Ages 11-13', desc: 'Discovering passions through specialized electives and advanced curriculum.', icon: <MonitorPlay size={32} color="#8B5CF6" />, bg: '#f5f3ff', image: 'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?q=80&w=800&auto=format&fit=crop' },
-    { id: 'high-school', title: 'High School', ageGroup: 'Ages 14-18', desc: 'College prep, AP courses, and leadership development programs.', icon: <Award size={32} color="#F59E0B" />, bg: '#fffbeb', image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=800&auto=format&fit=crop' },
+    { id: 'early-childhood', title: 'Early Childhood', ageGroup: 'Ages 3-5', desc: 'Fostering curiosity and social skills in a nurturing environment.', icon: <Users size={32} color="#10B981" />, bg: '#ECFDF5', image: 'https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=800&auto=format&fit=crop' },
+    { id: 'elementary', title: 'Elementary School', ageGroup: 'Ages 6-10', desc: 'Building strong foundations in core subjects with project-based learning.', icon: <BookOpen size={32} color="#3B82F6" />, bg: '#eff6ff', image: 'https://images.unsplash.com/photo-1543269865-cbf427effbad?q=80&w=800&auto=format&fit=crop' },
+    { id: 'middle-school', title: 'Middle School', ageGroup: 'Ages 11-13', desc: 'Discovering passions through specialized electives and advanced curriculum.', icon: <MonitorPlay size={32} color="#8B5CF6" />, bg: '#f5f3ff', image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=800&auto=format&fit=crop' },
+    { id: 'high-school', title: 'High School', ageGroup: 'Ages 14-18', desc: 'College prep, AP courses, and leadership development programs.', icon: <Award size={32} color="#F59E0B" />, bg: '#fffbeb', image: 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?q=80&w=800&auto=format&fit=crop' },
   ];
 
   return (

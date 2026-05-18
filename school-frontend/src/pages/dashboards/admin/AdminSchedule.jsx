@@ -11,7 +11,7 @@ export default function AdminSchedule() {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [currentWeek, setCurrentWeek] = useState('Current Timetable');
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().substring(0, 10));
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const getWeekDates = (dateStr) => {
@@ -109,9 +109,28 @@ export default function AdminSchedule() {
     onError: () => error('Failed to delete schedule')
   });
 
+  const deleteEvent = useMutation({
+    mutationFn: async (id) => {
+      return await fetch(`http://localhost:8000/api/events/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['events']);
+      success('Event deleted successfully.');
+    },
+    onError: () => error('Failed to delete event')
+  });
+
   const handleDelete = (id, e) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to remove this schedule?')) deleteSchedule.mutate(id);
+  };
+
+  const handleDeleteEvent = (id, e) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to remove this event?')) deleteEvent.mutate(id);
   };
 
   const handleCreate = (e) => {
@@ -121,19 +140,25 @@ export default function AdminSchedule() {
 
   const handlePrint = () => window.print();
 
-  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const selectedDateObj = new Date(selectedDate || new Date());
+  const selectedDayName = days[selectedDateObj.getDay()];
+  const daysOfWeek = [selectedDayName];
 
   const getTopAndHeight = (start_time, end_time) => {
     if (!start_time || !end_time) return { top: '0px', height: '100px' };
     const [sH, sM] = start_time.split(':').map(Number);
     const [eH, eM] = end_time.split(':').map(Number);
     
-    const startOffset = sH + (sM / 60) - 8; // 8 AM is 0
-    const duration = (eH + (eM / 60)) - (sH + (sM / 60));
+    const startOffset = sH + (sM / 60); // 00:00 is 0
+    let duration = (eH + (eM / 60)) - (sH + (sM / 60));
     
+    // Handle overnight events spanning past midnight
+    if (duration < 0) duration += 24;
+
     return {
-      top: `${Math.max(0, startOffset * 100)}px`,
-      height: `${Math.max(100, duration * 100)}px`
+      top: `${startOffset * 100}px`,
+      height: `${Math.max(85, duration * 100)}px`
     };
   };
 
@@ -175,112 +200,133 @@ export default function AdminSchedule() {
         </div>
       </div>
 
-      <Card style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-        <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: '1000px', padding: '1rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '100px repeat(5, 1fr)', borderBottom: '2px solid var(--color-border)', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
+      <Card className="print-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+        <div className="print-overflow" style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: '800px', padding: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `100px repeat(${daysOfWeek.length}, 1fr)`, borderBottom: '2px solid var(--color-border)', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
                     <div style={{ padding: '1.25rem', textAlign: 'center', fontWeight: '800', color: 'var(--color-text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Time</div>
                     {daysOfWeek.map((day, idx) => (
                         <div key={idx} style={{ padding: '1.25rem', textAlign: 'center', fontWeight: '700', borderLeft: '1px solid var(--color-border)', color: 'var(--color-text-main)' }}>
-                            {day}
+                            {day} - {selectedDate}
                         </div>
                     ))}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '100px repeat(5, 1fr)', position: 'relative', background: 'var(--color-surface)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `100px repeat(${daysOfWeek.length}, 1fr)`, position: 'relative', background: 'var(--color-surface)' }}>
                     <div style={{ borderRight: '1px solid var(--color-border)' }}>
-                        {['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'].map(time => (
+                        {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00').map(time => (
                             <div key={time} style={{ height: '100px', padding: '0.75rem', textAlign: 'center', fontSize: '0.8rem', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', fontWeight: '600' }}>
                                 {time}
                             </div>
                         ))}
                     </div>
 
-                    {daysOfWeek.map((day, i) => (
+                    {daysOfWeek.map((day, i) => {
+                        const dayItems = [];
+
+                        // 1. Schedules
+                        schedules.filter(s => s.day_of_week === day).forEach(s => {
+                            dayItems.push({ ...s, itemType: 'schedule', start: s.start_time, end: s.end_time });
+                        });
+
+                        // 2. Courses
+                        coursesData.forEach(course => {
+                            const dt = getDayAndTime(course.schedule);
+                            const courseDate = course.schedule?.substring(0, 10);
+                            if (dt && dt.day === day && courseDate === selectedDate) {
+                                dayItems.push({ 
+                                    ...course, 
+                                    itemType: 'course', 
+                                    start: dt.time, 
+                                    end: `${String(parseInt(dt.time.split(':')[0]) + 2).padStart(2, '0')}:00` 
+                                });
+                            }
+                        });
+
+                        // 3. Events
+                        events.forEach(event => {
+                            const dt = getDayAndTime(event.start_time);
+                            const dtEnd = getDayAndTime(event.end_time);
+                            const eventDate = event.start_time?.substring(0, 10);
+                            if (dt && dt.day === day && eventDate === selectedDate) {
+                                dayItems.push({ 
+                                    ...event, 
+                                    itemType: 'event', 
+                                    start: dt.time, 
+                                    end: dtEnd ? dtEnd.time : `${String(parseInt(dt.time.split(':')[0]) + 1).padStart(2, '0')}:00` 
+                                });
+                            }
+                        });
+
+                        // Sort by start time
+                        dayItems.sort((a, b) => a.start.localeCompare(b.start));
+
+                        return (
                         <div key={i} style={{ borderRight: '1px solid var(--color-border)', position: 'relative' }}>
-                            {Array(9).fill(null).map((_, j) => (
+                            {Array(24).fill(null).map((_, j) => (
                                 <div key={j} style={{ height: '100px', borderBottom: '1px solid var(--color-border)' }}></div>
                             ))}
 
-                            {schedules.filter(s => s.day_of_week === day).map(s => {
-                                const { top, height } = getTopAndHeight(s.start_time, s.end_time);
-                                return (
-                                <div key={s.id} style={{ 
-                                    position: 'absolute', top, left: '8px', right: '8px', height, 
-                                    background: 'rgba(99, 102, 241, 0.1)', borderLeft: '4px solid var(--color-primary)', 
-                                    borderRadius: 'var(--radius-md)', padding: '0.75rem', zIndex: 1,
-                                    boxShadow: 'var(--shadow-sm)', transition: 'transform 0.2s',
-                                    display: 'flex', flexDirection: 'column', gap: '4px'
-                                }}>
-                                    <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }} className="no-print">
-                                        <button 
-                                            onClick={(e) => handleDelete(s.id, e)}
-                                            style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '2px' }}
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    </div>
-                                    <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--color-primary)', paddingRight: '20px' }}>{s.course?.name || 'Unknown Course'}</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
-                                        <Users size={12}/> Class: {s.class_room?.name}
-                                    </div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <BookOpen size={12}/> Teacher: {s.teacher?.user?.name}
-                                    </div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Clock size={12}/> {s.start_time.substring(0,5)} - {s.end_time.substring(0,5)} • <MapPin size={12}/> {s.room_number}
-                                    </div>
-                                </div>
-                            )})}
+                            {dayItems.map((item, idx) => {
+                                const { top, height } = getTopAndHeight(item.start, item.end);
+                                
+                                const baseStyle = {
+                                    position: 'absolute', top, 
+                                    left: '8px', 
+                                    width: 'calc(100% - 16px)', 
+                                    height, 
+                                    borderRadius: 'var(--radius-md)', padding: '0.5rem', zIndex: 1,
+                                    boxShadow: 'var(--shadow-sm)', transition: 'all 0.2s',
+                                    display: 'flex', flexDirection: 'column', gap: '4px',
+                                    overflow: 'hidden'
+                                };
 
-                            {coursesData.map(course => {
-                                const dt = getDayAndTime(course.schedule);
-                                const courseDate = course.schedule?.substring(0, 10);
-                                const targetDateForDay = weekDates ? weekDates[day] : null;
-                                if (dt && dt.day === day && (!selectedDate || courseDate === targetDateForDay)) {
-                                    const { top, height } = getTopAndHeight(dt.time, `${String(parseInt(dt.time.split(':')[0]) + 2).padStart(2, '0')}:00`); // Assume 2 hours duration if not specified
+                                if (item.itemType === 'schedule') {
                                     return (
-                                        <div key={`course-${course.id}`} style={{ 
-                                            position: 'absolute', top, left: '8px', right: '8px', height, 
-                                            background: 'rgba(16, 185, 129, 0.1)', borderLeft: '4px solid var(--color-success)', 
-                                            borderRadius: 'var(--radius-md)', padding: '0.75rem', zIndex: 1,
-                                            boxShadow: 'var(--shadow-sm)', transition: 'transform 0.2s',
-                                            display: 'flex', flexDirection: 'column', gap: '4px'
-                                        }}>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--color-success)' }}>{course.name}</div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
-                                                <Users size={12}/> Class: {course.class_room?.name}
+                                        <div key={`schedule-${item.id}-${idx}`} style={{ ...baseStyle, background: 'rgba(99, 102, 241, 0.1)', borderLeft: '4px solid var(--color-primary)' }}>
+                                            <div style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 10 }} className="no-print">
+                                                <button onClick={(e) => handleDelete(item.id, e)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '2px' }}>
+                                                    <X size={14} />
+                                                </button>
                                             </div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <Clock size={12}/> {dt.time}
+                                            <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--color-primary)', paddingRight: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.course?.name || 'Course'}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                                                <Users size={12}/> {item.class_room?.name}
+                                            </div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <BookOpen size={12}/> {item.teacher?.user?.name}
+                                            </div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <Clock size={12}/> {item.start.substring(0,5)} - {item.end.substring(0,5)}
                                             </div>
                                         </div>
                                     );
-                                }
-                                return null;
-                            })}
-
-                            {events.map(event => {
-                                const dt = getDayAndTime(event.start_time);
-                                const dtEnd = getDayAndTime(event.end_time);
-                                const eventDate = event.start_time?.substring(0, 10);
-                                const targetDateForDay = weekDates ? weekDates[day] : null;
-                                if (dt && dt.day === day && (!selectedDate || eventDate === targetDateForDay)) {
-                                    const { top, height } = getTopAndHeight(dt.time, dtEnd ? dtEnd.time : `${String(parseInt(dt.time.split(':')[0]) + 1).padStart(2, '0')}:00`);
+                                } else if (item.itemType === 'course') {
                                     return (
-                                        <div key={`event-${event.id}`} style={{ 
-                                            position: 'absolute', top, left: '8px', right: '8px', height, 
-                                            background: 'rgba(245, 158, 11, 0.1)', borderLeft: '4px solid var(--color-warning)', 
-                                            borderRadius: 'var(--radius-md)', padding: '0.75rem', zIndex: 1,
-                                            boxShadow: 'var(--shadow-sm)', transition: 'transform 0.2s',
-                                            display: 'flex', flexDirection: 'column', gap: '4px'
-                                        }}>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--color-warning)' }}>{event.title}</div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                {event.description}
+                                        <div key={`course-${item.id}-${idx}`} style={{ ...baseStyle, background: 'rgba(16, 185, 129, 0.1)', borderLeft: '4px solid var(--color-success)' }}>
+                                            <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--color-success)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                                                <Users size={12}/> {item.class_room?.name}
                                             </div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <Clock size={12}/> {dt.time}
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <Clock size={12}/> {item.start.substring(0,5)}
+                                            </div>
+                                        </div>
+                                    );
+                                } else if (item.itemType === 'event') {
+                                    return (
+                                        <div key={`event-${item.id}-${idx}`} style={{ ...baseStyle, background: 'rgba(245, 158, 11, 0.1)', borderLeft: '4px solid var(--color-warning)' }}>
+                                            <div style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 10 }} className="no-print">
+                                                <button onClick={(e) => handleDeleteEvent(item.id, e)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', padding: '2px' }}>
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--color-warning)', paddingRight: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-body)', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {item.description}
+                                            </div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <Clock size={12}/> {item.start.substring(0,5)}
                                             </div>
                                         </div>
                                     );
@@ -288,7 +334,7 @@ export default function AdminSchedule() {
                                 return null;
                             })}
                         </div>
-                    ))}
+                    )})}
                 </div>
             </div>
         </div>
@@ -327,10 +373,16 @@ export default function AdminSchedule() {
 
       <style>{`
         @media print {
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
           .no-print, aside, nav, header { display: none !important; }
           body { background: white !important; margin: 0; padding: 0; }
-          .printable-area { margin: 0 !important; width: 100% !important; position: absolute; left: 0; top: 0; }
-          Card { box-shadow: none !important; border: 1px solid #eee !important; }
+          .printable-area { margin: 0 !important; width: 100% !important; }
+          .print-card { box-shadow: none !important; border: 1px solid #ccc !important; overflow: visible !important; }
+          .print-overflow { overflow: visible !important; }
         }
       `}</style>
     </div>

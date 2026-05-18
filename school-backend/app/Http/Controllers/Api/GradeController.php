@@ -37,8 +37,12 @@ class GradeController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'student_id' => 'required|exists:students,id',
-            'course_id' => 'required|exists:courses,id',
-            'score' => 'required|numeric|min:0|max:20',
+            'course_id'  => 'required|exists:courses,id',
+            'cc1'        => 'nullable|numeric|min:0|max:20',
+            'cc2'        => 'nullable|numeric|min:0|max:20',
+            'cc3'        => 'nullable|numeric|min:0|max:20',
+            'efm'        => 'nullable|numeric|min:0|max:20',
+            'score'      => 'required|numeric|min:0|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -47,7 +51,13 @@ class GradeController extends Controller
 
         $grade = Grade::updateOrCreate(
             ['student_id' => $request->student_id, 'course_id' => $request->course_id],
-            ['score' => $request->score]
+            [
+                'cc1'   => $request->cc1 ?? 0,
+                'cc2'   => $request->cc2 ?? 0,
+                'cc3'   => $request->cc3 ?? 0,
+                'efm'   => $request->efm ?? 0,
+                'score' => $request->score
+            ]
         );
 
         return response()->json([

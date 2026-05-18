@@ -23,7 +23,7 @@ export default function About() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5rem', alignItems: 'center', marginBottom: '8rem' }}>
         <div style={{ position: 'relative' }}>
-          <img src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=800&auto=format&fit=crop" style={{ borderRadius: 'var(--radius-2xl)', width: '100%', boxShadow: 'var(--shadow-xl)' }} alt="Campus Life" />
+          <img src="/campus_life.png" style={{ borderRadius: 'var(--radius-2xl)', width: '100%', boxShadow: 'var(--shadow-xl)' }} alt="Campus Life" />
           <div style={{ position: 'absolute', bottom: '-2rem', right: '-2rem', background: 'var(--color-primary)', color: 'white', padding: '2.5rem', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)' }}>
             <h3 style={{ fontSize: '3.5rem', margin: 0, lineHeight: 1 }}>25+</h3>
             <p style={{ fontSize: '1.1rem', opacity: 0.9, marginTop: '0.5rem' }}>Years of Excellence</p>

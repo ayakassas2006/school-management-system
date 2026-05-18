@@ -71,7 +71,9 @@ class AuthController extends Controller
                     break;
                 case 'parent':
                     $parent = SchoolParent::create(['user_id' => $user->id]);
-                    if ($request->student_id) {
+                    if ($request->has('student_ids') && is_array($request->student_ids)) {
+                        Student::whereIn('id', $request->student_ids)->update(['parent_id' => $parent->id]);
+                    } elseif ($request->student_id) {
                         Student::where('id', $request->student_id)->update(['parent_id' => $parent->id]);
                     }
                     break;

@@ -140,4 +140,43 @@ class CourseController extends Controller
 
         return response()->json($result);
     }
+
+    /**
+     * Get all courses belonging to the currently authenticated teacher (scoped).
+     * Returns courses where either:
+     *   - The course belongs to a class the teacher is assigned to (via class_teacher pivot), OR
+     *   - The course has the teacher's teacher_id directly set on it.
+     */
+    public function myCourses(Request $request)
+    {
+        $user = $request->user();
+        $teacher = \App\Models\Teacher::where('user_id', $user->id)->first();
+
+        if (!$teacher) {
+            return response()->json(['status' => 'error', 'message' => 'Teacher profile not found.'], 404);
+        }
+
+        // Get class IDs from the pivot table
+        $classIds = $teacher->classes()->pluck('classes.id')->toArray();
+
+        $courses = Course::with(['classRoom'])
+            ->where(function ($q) use ($classIds, $teacher) {
+                if (!empty($classIds)) {
+                    $q->whereIn('class_id', $classIds);
+                }
+                // Also include courses directly assigned to this teacher
+                $q->orWhere('teacher_id', $teacher->id);
+            })
+            ->get()
+            ->map(function ($course) {
+                return [
+                    'id'       => $course->id,
+                    'name'     => $course->name,
+                    'class_id' => $course->class_id,
+                    'class'    => $course->classRoom ? ['id' => $course->classRoom->id, 'name' => $course->classRoom->name] : null,
+                ];
+            });
+
+        return response()->json(['status' => 'success', 'data' => $courses]);
+    }
 }

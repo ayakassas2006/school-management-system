@@ -1,20 +1,79 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import Modal from '../../components/ui/Modal';
+import { useToast } from '../../components/ui/Toast';
+import { programApplicationsApi } from '../../services/api';
 
 export default function ProgramDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { success, error } = useToast();
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ parent_name: '', email: '', phone: '', child_name: '', child_age: '', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleApplyClick = () => setIsModalOpen(true);
+
+  const handleCloseModal = () => {
+      setIsModalOpen(false);
+      setFormData({ parent_name: '', email: '', phone: '', child_name: '', child_age: '', message: '' });
+  };
+
+  const handleInputChange = (e) => {
+      setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      try {
+          await programApplicationsApi.submit({ ...formData, program_id: id });
+          success('Application submitted successfully! We will contact you soon.');
+          handleCloseModal();
+      } catch (err) {
+          console.error(err);
+          error('Failed to submit application. Please try again.');
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
 
   // Mock data fetching based on ID
   const programData = {
+    'early-childhood': {
+        title: 'Early Childhood Program',
+        subtitle: 'Fostering curiosity and social skills in a nurturing environment',
+        desc: 'Our Early Childhood program focuses on learning through play, helping children develop cognitive, social, and emotional skills in a safe and supportive setting. We emphasize creativity, exploration, and building a strong foundation for future learning.',
+        subjects: ['Creative Arts & Play', 'Basic Numeracy & Literacy', 'Social & Emotional Learning', 'Physical Development'],
+        outcomes: ['Confidence & Independence', 'Strong Peer Relationships', 'Joy for Learning', 'Motor Skills Development'],
+        image: 'https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=1200&auto=format&fit=crop'
+    },
+    'elementary': {
+        title: 'Elementary School Program',
+        subtitle: 'Building strong foundations in core subjects with project-based learning',
+        desc: 'Our Elementary curriculum is designed to ignite a passion for learning. Through project-based activities and a strong focus on core subjects, students develop critical thinking and problem-solving skills. We encourage active participation and collaborative learning.',
+        subjects: ['Mathematics & Science', 'Reading & Writing', 'Social Studies', 'Arts & Physical Education'],
+        outcomes: ['Strong Academic Foundation', 'Critical Thinking Skills', 'Effective Communication', 'Collaborative Teamwork'],
+        image: 'https://images.unsplash.com/photo-1543269865-cbf427effbad?q=80&w=1200&auto=format&fit=crop'
+    },
+    'middle-school': {
+        title: 'Middle School Program',
+        subtitle: 'Discovering passions through specialized electives and advanced curriculum',
+        desc: 'The Middle School years are a time of significant transition and growth. Our program provides a supportive environment where students can explore new interests through specialized electives while continuing to build on their academic strengths in core subjects.',
+        subjects: ['Pre-Algebra & Algebra', 'Earth & Life Sciences', 'Literature & Composition', 'Foreign Languages', 'Technology & Arts'],
+        outcomes: ['Self-Discovery & Identity', 'Advanced Problem Solving', 'Preparation for High School', 'Time Management Skills'],
+        image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?q=80&w=1200&auto=format&fit=crop'
+    },
     'high-school': {
         title: 'High School Program',
         subtitle: 'Preparing students for university and beyond',
         desc: 'Our High School curriculum is a rigorous, college-preparatory program designed to challenge students intellectually while supporting their emotional and social development. With a wide range of Advanced Placement (AP) courses and specialized electives, students can tailor their education to their passions.',
         subjects: ['Advanced Mathematics', 'Physics, Chemistry, Biology', 'World Literature', 'Computer Science & AI', 'Global History'],
-        outcomes: ['Top-tier University Acceptances', 'Critical Thinking & Leadership', 'Global Citizenship', 'Technological Fluency']
+        outcomes: ['Top-tier University Acceptances', 'Critical Thinking & Leadership', 'Global Citizenship', 'Technological Fluency'],
+        image: 'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?q=80&w=1200&auto=format&fit=crop'
     }
   };
 
@@ -23,7 +82,8 @@ export default function ProgramDetails() {
       subtitle: 'Comprehensive academic curriculum',
       desc: 'Our academic programs are structured to provide the best possible learning experience for students, ensuring they develop both subject matter expertise and critical soft skills.',
       subjects: ['Core Mathematics', 'Sciences', 'Language Arts', 'Physical Education'],
-      outcomes: ['Academic Excellence', 'Personal Growth', 'Social Responsibility']
+      outcomes: ['Academic Excellence', 'Personal Growth', 'Social Responsibility'],
+      image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=1200&auto=format&fit=crop'
   };
 
   return (
@@ -39,7 +99,7 @@ export default function ProgramDetails() {
         <h1 style={{ fontSize: '3.5rem', marginBottom: '1rem', color: 'var(--color-text-main)' }}>{data.title}</h1>
         <h2 style={{ fontSize: '1.5rem', color: 'var(--color-primary)', fontWeight: '500', marginBottom: '2.5rem' }}>{data.subtitle}</h2>
         
-        <img src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=1200&auto=format&fit=crop" style={{ width: '100%', height: '400px', objectFit: 'cover', borderRadius: 'var(--radius-2xl)', marginBottom: '3rem', boxShadow: 'var(--shadow-lg)' }} alt="Program" />
+        <img src={data.image} style={{ width: '100%', height: '400px', objectFit: 'cover', borderRadius: 'var(--radius-2xl)', marginBottom: '3rem', boxShadow: 'var(--shadow-lg)' }} alt={data.title} />
 
         <div style={{ marginBottom: '4rem' }}>
             <h3 style={{ fontSize: '2rem', marginBottom: '1.5rem', color: 'var(--color-text-main)' }}>Overview</h3>
@@ -76,9 +136,42 @@ export default function ProgramDetails() {
         <div style={{ background: '#F8FAFC', padding: '3rem', borderRadius: 'var(--radius-xl)', textAlign: 'center' }}>
             <h3 style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>Ready to join this program?</h3>
             <p style={{ color: 'var(--color-text-muted)', marginBottom: '2rem' }}>Contact our admissions office to schedule a tour or begin your application.</p>
-            <Button variant="primary" size="lg">Apply Now</Button>
+            <Button variant="primary" size="lg" onClick={handleApplyClick}>Apply Now</Button>
         </div>
       </div>
+
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={`Apply for ${data.title}`}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Parent Name *</label>
+                  <input type="text" name="parent_name" value={formData.parent_name} onChange={handleInputChange} required style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }} />
+              </div>
+              <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Email Address *</label>
+                  <input type="email" name="email" value={formData.email} onChange={handleInputChange} required style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }} />
+              </div>
+              <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Phone Number *</label>
+                  <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} required style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }} />
+              </div>
+              <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Child's Name *</label>
+                  <input type="text" name="child_name" value={formData.child_name} onChange={handleInputChange} required style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }} />
+              </div>
+              <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Child's Age *</label>
+                  <input type="number" name="child_age" value={formData.child_age} onChange={handleInputChange} min="1" required style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }} />
+              </div>
+              <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Additional Message</label>
+                  <textarea name="message" value={formData.message} onChange={handleInputChange} rows="3" style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }}></textarea>
+              </div>
+              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                  <Button variant="secondary" onClick={handleCloseModal} type="button">Cancel</Button>
+                  <Button variant="primary" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit Application'}</Button>
+              </div>
+          </form>
+      </Modal>
     </div>
   );
 }

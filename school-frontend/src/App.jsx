@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useToast } from './components/ui/Toast';
 
 // Public Pages
 import Home from './pages/public/Home.jsx';
@@ -84,11 +85,27 @@ import ParentChildBehavior from './pages/dashboards/parent/ParentChildBehavior.j
 import DashboardLayout from './components/layouts/DashboardLayout.jsx';
 import PublicLayout from './components/layouts/PublicLayout.jsx';
 
+function GlobalErrorListener() {
+  const { error } = useToast();
+
+  useEffect(() => {
+    const handleApiError = (e) => {
+      error(e.detail || 'An unexpected server error occurred.');
+    };
+    window.addEventListener('api-error', handleApiError);
+    return () => window.removeEventListener('api-error', handleApiError);
+  }, [error]);
+
+  return null;
+}
+
 function AppContent() {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
 
   return (
-      <Routes>
+      <>
+        <GlobalErrorListener />
+        <Routes>
         {/* Public Routes */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
@@ -181,6 +198,7 @@ function AppContent() {
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      </>
   );
 }
 

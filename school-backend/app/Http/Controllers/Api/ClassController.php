@@ -14,7 +14,7 @@ class ClassController extends Controller
      */
     public function index()
     {
-        $classes = ClassRoom::with(['teacher.user', 'students.user'])->get();
+        $classes = ClassRoom::with(['teachers.user', 'students.user'])->get();
         return response()->json(['status' => 'success', 'data' => $classes]);
     }
 
@@ -42,7 +42,7 @@ class ClassController extends Controller
      */
     public function show($id)
     {
-        $class = ClassRoom::with(['teacher.user', 'students.user', 'courses'])->find($id);
+        $class = ClassRoom::with(['teachers.user', 'students.user', 'courses'])->find($id);
         if (!$class) {
             return response()->json(['status' => 'error', 'message' => 'Class not found.'], 404);
         }

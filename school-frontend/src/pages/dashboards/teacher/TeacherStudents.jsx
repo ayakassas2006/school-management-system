@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
-import { Search, Mail, MessageSquare, Trash2 } from 'lucide-react';
+import { Search, Mail, MessageSquare, Trash2, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentsApi, classesApi } from '../../../services/api';
@@ -19,6 +20,7 @@ export default function TeacherStudents() {
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
   const [filterClass, setFilterClass] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: students = [], isLoading } = useQuery({
     queryKey: ['teacher-students'],
@@ -46,7 +48,12 @@ export default function TeacherStudents() {
           classId: s.class_id,
           grade: avgGrade,
           lastAttendance: lastAttendance,
-          avatarUrl: null
+          avatarUrl: null,
+          studentEmail: s.user?.email || null,
+          parentEmail: s.school_parent?.user?.email || null,
+          studentUserId: s.user?.id || null,
+          parentUserId: s.school_parent?.user?.id || null,
+          parentName: s.school_parent?.user?.name || null
         };
       });
     }
@@ -98,8 +105,50 @@ export default function TeacherStudents() {
     }
   });
 
+  const handleDownloadPDF = (student) => {
+    try {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(22);
+      doc.setTextColor(59, 130, 246); // Primary blue color
+      doc.text('Student Academic Report', 20, 30);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(50, 50, 50);
+      
+      let yPos = 50;
+      const lineHeight = 10;
+      
+      doc.text(`Student Name: ${student.name}`, 20, yPos);
+      yPos += lineHeight;
+      doc.text(`Student ID: ${student.id}`, 20, yPos);
+      yPos += lineHeight;
+      doc.text(`Assigned Class: ${student.class}`, 20, yPos);
+      yPos += lineHeight;
+      doc.text(`Current Grade: ${student.grade !== 'N/A' ? student.grade + '/20' : 'N/A'}`, 20, yPos);
+      yPos += lineHeight;
+      doc.text(`Recent Attendance: ${student.lastAttendance}`, 20, yPos);
+      
+      doc.setDrawColor(200, 200, 200);
+      doc.line(20, yPos + 10, 190, yPos + 10);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Generated on ${new Date().toLocaleDateString()} by EduSaaS System`, 20, yPos + 20);
+      
+      doc.save(`${student.name.replace(/\s+/g, '_')}_Report.pdf`);
+      success('PDF Report downloaded successfully!');
+    } catch (err) {
+      showError('Failed to generate PDF. Make sure jspdf is installed correctly.');
+    }
+  };
+
   const uniqueGroups = [...new Set(students.map(s => s.class))];
-  const filteredStudents = filterClass === '' ? students : students.filter(s => s.class === filterClass);
+  const filteredStudents = students.filter(s => {
+    const matchesClass = filterClass === '' || s.class === filterClass;
+    const matchesSearch = searchQuery === '' || s.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesClass && matchesSearch;
+  });
 
   return (
     <div>
@@ -126,6 +175,8 @@ export default function TeacherStudents() {
             <input
               type="text"
               placeholder="Search students..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '250px', padding: '0.5rem 1rem 0.5rem 2.5rem', borderRadius: '2rem', border: '1px solid var(--color-border)', outline: 'none' }}
             />
           </div>
@@ -169,11 +220,38 @@ export default function TeacherStudents() {
                   </td>
                   <td style={{ padding: '1.5rem', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <button style={{ background: 'var(--color-bg)', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer' }} title="Email Student">
+                      <button 
+                        onClick={() => {
+                          if (student.studentUserId) {
+                            navigate('/dashboard/teacher/messages', { state: { targetUser: { id: student.studentUserId, name: student.name, role: 'Student' } } });
+                          } else {
+                            alert('No valid student user found to message.');
+                          }
+                        }}
+                        style={{ background: 'var(--color-bg)', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer', transition: 'all 0.2s' }} 
+                        title="Message Student"
+                      >
                         <Mail size={16} />
                       </button>
-                      <button style={{ background: 'var(--color-bg)', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer' }} title="Message Parent">
+                      <button 
+                        onClick={() => {
+                          if (student.parentUserId) {
+                            navigate('/dashboard/teacher/messages', { state: { targetUser: { id: student.parentUserId, name: student.parentName || (student.name + "'s Parent"), role: 'Parent' } } });
+                          } else {
+                            alert('No valid parent user found to message.');
+                          }
+                        }}
+                        style={{ background: 'var(--color-bg)', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer', transition: 'all 0.2s' }} 
+                        title="Message Parent"
+                      >
                         <MessageSquare size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDownloadPDF(student)}
+                        style={{ background: 'rgba(59,130,246,0.1)', padding: '0.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', cursor: 'pointer', transition: 'all 0.2s' }} 
+                        title="Download PDF Report"
+                      >
+                        <Download size={16} />
                       </button>
                       <button
                         onClick={() => {

@@ -41,6 +41,9 @@ async function request(method, endpoint, body = null) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_role');
       window.location.href = '/login';
+    } else {
+      const errorMsg = data?.message || data?.error || 'An unexpected error occurred while communicating with the server.';
+      window.dispatchEvent(new CustomEvent('api-error', { detail: errorMsg }));
     }
     throw data; // Throw the full error object for caller to handle
   }
@@ -97,6 +100,7 @@ export const classesApi = {
 // Courses
 export const coursesApi = {
   getAll: () => request('GET', '/courses'),
+  getMyCourses: () => request('GET', '/teacher/my-courses'),
   create: (data) => request('POST', '/courses', data),
   update: (id, data) => request('PUT', `/courses/${id}`, data),
   delete: (id) => request('DELETE', `/courses/${id}`),
@@ -109,7 +113,7 @@ export const attendanceApi = {
     return request('GET', `/attendance${query ? '?' + query : ''}`);
   },
   mark: (data) => request('POST', '/attendance', data),
-  batchMark: (date, records) => request('POST', '/attendance/batch', { date, attendance: records }),
+  batchMark: (date, records, courseId = null) => request('POST', '/attendance/batch', { date, course_id: courseId, attendance: records }),
 };
 
 // Grades
@@ -184,4 +188,9 @@ export const schedulesApi = {
   create: (data) => request('POST', '/schedules', data),
   update: (id, data) => request('PUT', `/schedules/${id}`, data),
   delete: (id) => request('DELETE', `/schedules/${id}`),
+};
+
+// Program Applications
+export const programApplicationsApi = {
+  submit: (data) => request('POST', '/program-applications', data),
 };

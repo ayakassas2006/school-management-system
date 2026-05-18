@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\ScheduleController;
 // Public routes (no auth required)
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/program-applications', [\App\Http\Controllers\ProgramApplicationController::class, 'store']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -47,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Admins and Teachers: Academic management
     Route::middleware('role:admin,teacher')->group(function () {
+        Route::get('/teacher/my-courses', [CourseController::class, 'myCourses']);
         Route::apiResource('students', StudentController::class);
         Route::post('students/assign-class', [StudentController::class, 'assignClass']);
         Route::apiResource('classes', ClassController::class);

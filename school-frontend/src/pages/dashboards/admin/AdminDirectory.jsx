@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
-import { Search, Plus, MoreVertical, Mail, Phone, UserPlus, RefreshCw, Trash2, Edit } from 'lucide-react';
+import { Search, Plus, MoreVertical, Mail, Phone, UserPlus, RefreshCw, Trash2, Edit, X } from 'lucide-react';
 import { useToast } from '../../../components/ui/Toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usersApi, authApi, classesApi } from '../../../services/api';
@@ -29,6 +29,7 @@ export default function AdminDirectory() {
     class_id: '',
     parent_id: '',
     student_id: '',
+    student_ids: [],
   });
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -45,6 +46,9 @@ export default function AdminDirectory() {
     parent_id: '',
     student_id: '',
   });
+
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentClassFilter, setStudentClassFilter] = useState('');
 
   const { data: studentsList = [] } = useQuery({
     queryKey: ['students'],
@@ -112,15 +116,18 @@ export default function AdminDirectory() {
         class_id: newUser.role === 'student' ? newUser.class_id : undefined,
         parent_id: newUser.role === 'student' ? newUser.parent_id : undefined,
         student_id: newUser.role === 'parent' ? newUser.student_id : undefined,
+        student_ids: newUser.role === 'parent' ? newUser.student_ids : undefined,
       });
 
       success(`${newUser.name} has been added and saved to the database!`);
       setIsModalOpen(false);
-      setNewUser({ name: '', email: '', password: 'password', password_confirmation: 'password', role: '', phone: '', department: '', specialization: '', class_ids: [], class_id: '', parent_id: '', student_id: '' });
+      setNewUser({ name: '', email: '', password: 'password', password_confirmation: 'password', role: '', phone: '', department: '', specialization: '', class_ids: [], class_id: '', parent_id: '', student_id: '', student_ids: [] });
 
       // Refresh the list to include the new user from the DB
       await fetchUsers();
       await queryClient.invalidateQueries({ queryKey: ['classes'] });
+      await queryClient.invalidateQueries({ queryKey: ['students'] });
+      await queryClient.invalidateQueries({ queryKey: ['parents'] });
     } catch (err) {
       const errorMsg = err?.errors
         ? Object.values(err.errors).flat().join(' ')
@@ -164,6 +171,8 @@ export default function AdminDirectory() {
       // Refresh the list to include updated user details
       await fetchUsers();
       await queryClient.invalidateQueries({ queryKey: ['classes'] });
+      await queryClient.invalidateQueries({ queryKey: ['students'] });
+      await queryClient.invalidateQueries({ queryKey: ['parents'] });
     } catch (err) {
       const errorMsg = err?.errors
         ? Object.values(err.errors).flat().join(' ')
@@ -244,6 +253,7 @@ export default function AdminDirectory() {
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>User</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Contact</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Group / Class</th>
+                <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Children</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Role</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700' }}>Joined</th>
                 <th style={{ padding: '1.25rem 2rem', fontWeight: '700', textAlign: 'right' }}>Actions</th>
@@ -252,7 +262,7 @@ export default function AdminDirectory() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="6" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <td colSpan="7" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                     <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: '0.5rem' }} />
                     <div>Loading users from database...</div>
                   </td>
@@ -283,6 +293,23 @@ export default function AdminDirectory() {
                       <span>{user.profile?.classes?.map(c => c.name).join(', ') || 'N/A'}</span>
                     )}
                     {user.role?.toLowerCase() !== 'student' && user.role?.toLowerCase() !== 'teacher' && (
+                      <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '1.25rem 2rem', fontSize: '0.875rem', color: 'var(--color-text-main)' }}>
+                    {user.role?.toLowerCase() === 'parent' ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          {studentsList.filter(s => s.profile?.parent_id === user.profile?.id).length > 0 ? (
+                              studentsList.filter(s => s.profile?.parent_id === user.profile?.id).map(s => (
+                                  <span key={s.id} style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', padding: '0.2rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '600', display: 'inline-block' }}>
+                                      {s.name}
+                                  </span>
+                              ))
+                          ) : (
+                              <span style={{ color: 'var(--color-text-muted)' }}>-</span>
+                          )}
+                      </div>
+                    ) : (
                       <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                     )}
                   </td>
@@ -326,7 +353,7 @@ export default function AdminDirectory() {
               ))}
               {!loading && filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan="6" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  <td colSpan="7" style={{ padding: '4rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                     No users found matching your criteria.
                   </td>
                 </tr>
@@ -437,14 +464,84 @@ export default function AdminDirectory() {
           )}
 
           {newUser.role === 'parent' && (
-            <div>
-              <label className="form-label">Select Child (leur enfant)</label>
-              <select className="form-input" value={newUser.student_id} onChange={e => setNewUser({ ...newUser, student_id: e.target.value })}>
-                <option value="">Select Child</option>
-                {studentsList.map(s => (
-                  <option key={s.id} value={s.profile?.id || ''}>{s.name}</option>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <label className="form-label" style={{ marginBottom: 0 }}>Assign Children to Parent</label>
+              
+              {/* Selected Chips */}
+              {newUser.student_ids.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    {newUser.student_ids.map(id => {
+                        const student = studentsList.find(s => s.profile?.id?.toString() === id);
+                        if (!student) return null;
+                        return (
+                            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.5rem', background: 'var(--color-primary)', color: 'white', borderRadius: '1rem', fontSize: '0.75rem' }}>
+                                <span>{student.name}</span>
+                                <button type="button" onClick={() => setNewUser({...newUser, student_ids: newUser.student_ids.filter(x => x !== id)})} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={12} /></button>
+                            </div>
+                        );
+                    })}
+                </div>
+              )}
+
+              {/* Search and Filter */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Search students by name..." 
+                    value={studentSearch} 
+                    onChange={e => setStudentSearch(e.target.value)} 
+                />
+                <select className="form-input" value={studentClassFilter} onChange={e => setStudentClassFilter(e.target.value)}>
+                    <option value="">All Classes</option>
+                    {classesList.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Options List */}
+              <div style={{ 
+                border: '1px solid var(--color-border)', 
+                borderRadius: 'var(--radius-md)', 
+                padding: '0.5rem', 
+                maxHeight: '150px', 
+                overflowY: 'auto', 
+                background: 'var(--color-bg)' 
+              }}>
+                {studentsList
+                    .filter(s => {
+                        if (studentSearch && !s.name.toLowerCase().includes(studentSearch.toLowerCase())) return false;
+                        if (studentClassFilter && s.profile?.class_id?.toString() !== studentClassFilter) return false;
+                        return true;
+                    })
+                    .map(s => (
+                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.85rem', color: 'var(--color-text-body)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      value={s.profile?.id || ''}
+                      checked={newUser.student_ids.includes(s.profile?.id?.toString() || '')}
+                      onChange={e => {
+                        const id = e.target.value;
+                        const currentIds = newUser.student_ids;
+                        if (e.target.checked) {
+                          setNewUser({ ...newUser, student_ids: [...currentIds, id] });
+                        } else {
+                          setNewUser({ ...newUser, student_ids: currentIds.filter(x => x !== id) });
+                        }
+                      }}
+                    />
+                    {s.name} <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({classesList.find(c => c.id === s.profile?.class_id)?.name || 'No Class'})</span>
+                  </label>
                 ))}
-              </select>
+                {studentsList.filter(s => {
+                        if (studentSearch && !s.name.toLowerCase().includes(studentSearch.toLowerCase())) return false;
+                        if (studentClassFilter && s.profile?.class_id?.toString() !== studentClassFilter) return false;
+                        return true;
+                    }).length === 0 && (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>No students found matching your search.</div>
+                )}
+              </div>
             </div>
           )}
 
@@ -562,17 +659,58 @@ export default function AdminDirectory() {
           )}
 
           {editUser.role === 'parent' && (
-            <div>
-              <label className="form-label">Select Children</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <label className="form-label" style={{ marginBottom: 0 }}>Assign Children to Parent</label>
+              
+              {/* Selected Chips */}
+              {editUser.student_ids?.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    {editUser.student_ids.map(id => {
+                        const student = studentsList.find(s => s.profile?.id?.toString() === id);
+                        if (!student) return null;
+                        return (
+                            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.5rem', background: 'var(--color-primary)', color: 'white', borderRadius: '1rem', fontSize: '0.75rem' }}>
+                                <span>{student.name}</span>
+                                <button type="button" onClick={() => setEditUser({...editUser, student_ids: editUser.student_ids.filter(x => x !== id)})} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={12} /></button>
+                            </div>
+                        );
+                    })}
+                </div>
+              )}
+
+              {/* Search and Filter */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Search students by name..." 
+                    value={studentSearch} 
+                    onChange={e => setStudentSearch(e.target.value)} 
+                />
+                <select className="form-input" value={studentClassFilter} onChange={e => setStudentClassFilter(e.target.value)}>
+                    <option value="">All Classes</option>
+                    {classesList.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Options List */}
               <div style={{ 
                 border: '1px solid var(--color-border)', 
                 borderRadius: 'var(--radius-md)', 
                 padding: '0.5rem', 
-                maxHeight: '120px', 
+                maxHeight: '150px', 
                 overflowY: 'auto', 
                 background: 'var(--color-bg)' 
               }}>
-                {studentsList.map(s => (
+                {studentsList
+                    .filter(s => {
+                        if (studentSearch && !s.name.toLowerCase().includes(studentSearch.toLowerCase())) return false;
+                        if (studentClassFilter && s.profile?.class_id?.toString() !== studentClassFilter) return false;
+                        return true;
+                    })
+                    .map(s => (
                   <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.85rem', color: 'var(--color-text-body)', cursor: 'pointer' }}>
                     <input
                       type="checkbox"
@@ -588,9 +726,16 @@ export default function AdminDirectory() {
                         }
                       }}
                     />
-                    {s.name}
+                    {s.name} <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>({classesList.find(c => c.id === s.profile?.class_id)?.name || 'No Class'})</span>
                   </label>
                 ))}
+                {studentsList.filter(s => {
+                        if (studentSearch && !s.name.toLowerCase().includes(studentSearch.toLowerCase())) return false;
+                        if (studentClassFilter && s.profile?.class_id?.toString() !== studentClassFilter) return false;
+                        return true;
+                    }).length === 0 && (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>No students found matching your search.</div>
+                )}
               </div>
             </div>
           )}

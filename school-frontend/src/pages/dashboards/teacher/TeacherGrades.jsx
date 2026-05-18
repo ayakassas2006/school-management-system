@@ -5,6 +5,8 @@ import Button from '../../../components/ui/Button';
 import { Download, Save, Send, Users, TrendingUp } from 'lucide-react';
 import { useToast } from '../../../components/ui/Toast';
 import { coursesApi, studentsApi, gradesApi } from '../../../services/api';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const initialStudents = [];
 
@@ -15,8 +17,11 @@ export default function TeacherGrades() {
   const [filterClass, setFilterClass] = useState('');
   
   const { data: courses = [] } = useQuery({
-    queryKey: ['courses'],
-    queryFn: async () => (await coursesApi.getAll()).data
+    queryKey: ['my-courses'],
+    queryFn: async () => {
+      const res = await coursesApi.getMyCourses();
+      return res.data || [];
+    }
   });
 
   useEffect(() => {
@@ -25,22 +30,54 @@ export default function TeacherGrades() {
     }
   }, [courses, selectedCourseId]);
 
+  const selectedCourse = courses.find(c => c.id.toString() === selectedCourseId);
+  const selectedClassId = selectedCourse?.class_id || null;
+
   const { data: rawStudents = [] } = useQuery({
-    queryKey: ['students'],
-    queryFn: async () => (await studentsApi.getAll()).data
+    queryKey: ['students-for-class', selectedClassId],
+    queryFn: async () => {
+      if (!selectedClassId) return [];
+      const res = await studentsApi.getAll({ class_id: selectedClassId });
+      return res.data || [];
+    },
+    enabled: !!selectedClassId
   });
 
   const [gradesState, setGradesState] = useState({});
 
+  const { data: existingGrades = [] } = useQuery({
+    queryKey: ['grades', selectedCourseId],
+    queryFn: async () => {
+      if (!selectedCourseId) return [];
+      const res = await gradesApi.getAll({ course_id: selectedCourseId });
+      return res.data || [];
+    },
+    enabled: !!selectedCourseId
+  });
+
   useEffect(() => {
-    const newState = { ...gradesState };
+    setGradesState({});
+  }, [selectedCourseId]);
+
+  useEffect(() => {
+    if (!rawStudents.length) return;
+    const newState = {};
     rawStudents.forEach(st => {
-      if (!newState[st.id]) {
-        newState[st.id] = { q1: 0, mid: 0, proj: 0, fin: 0 };
+      newState[st.id] = { q1: 0, mid: 0, proj: 0, fin: 0 };
+    });
+    // Merge existing database grades
+    existingGrades.forEach(rec => {
+      if (newState[rec.student_id]) {
+        newState[rec.student_id] = {
+          q1: parseFloat(rec.cc1) || 0,
+          mid: parseFloat(rec.cc2) || 0,
+          proj: parseFloat(rec.cc3) || 0,
+          fin: parseFloat(rec.efm) || 0
+        };
       }
     });
     setGradesState(newState);
-  }, [rawStudents]);
+  }, [rawStudents, existingGrades]);
 
   const students = rawStudents.map(st => ({
     id: st.id,
@@ -56,7 +93,10 @@ export default function TeacherGrades() {
   const filteredStudents = filterClass === '' ? students : students.filter(s => s.class === filterClass);
 
   const calculateTotal = (s) => {
-    const total = (s.q1 * 0.1) + (s.mid * 0.3) + (s.proj * 0.2) + (s.fin * 0.4);
+    // CC1, CC2, and CC3 have the same coefficient and form 1/3 of the final grade
+    // EFM (End of Module Exam) has a higher coefficient, forming 2/3 of the final grade
+    const ccAverage = (s.q1 + s.mid + s.proj) / 3;
+    const total = (ccAverage + (s.fin * 2)) / 3;
     return Math.round(total * 100) / 100;
   };
 
@@ -75,11 +115,15 @@ export default function TeacherGrades() {
         await gradesApi.save({
           student_id: s.id,
           course_id: selectedCourseId,
+          cc1: s.q1,
+          cc2: s.mid,
+          cc3: s.proj,
+          efm: s.fin,
           score: calculateTotal(s)
         });
       }
+      queryClient.invalidateQueries({ queryKey: ['grades', selectedCourseId] });
       queryClient.invalidateQueries({ queryKey: ['teacher-students'] });
-      queryClient.invalidateQueries({ queryKey: ['students'] });
       success("Grades have been formally published to the database!");
     } catch (err) {
       error("Failed to publish grades.");
@@ -97,6 +141,60 @@ export default function TeacherGrades() {
     };
   }, [filteredStudents]);
 
+  const handleDownloadPDF = () => {
+    if (!selectedCourseId) {
+      error("Please select a course first.");
+      return;
+    }
+    
+    try {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(18);
+      doc.setTextColor(59, 130, 246);
+      doc.text('Module Grades Report', 14, 22);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Course: ${selectedCourse?.name || 'N/A'}`, 14, 30);
+      doc.text(`Class: ${selectedCourse?.class ? selectedCourse.class.name : 'N/A'}`, 14, 36);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 42);
+      
+      const tableColumn = ["Student Name", "CC1", "CC2", "CC3", "EFM", "Aggregate", "Status"];
+      const tableRows = [];
+
+      filteredStudents.forEach(student => {
+        const total = calculateTotal(student);
+        const status = total >= 10 ? 'Pass' : 'Fail';
+        const studentData = [
+          student.name,
+          student.q1.toString(),
+          student.mid.toString(),
+          student.proj.toString(),
+          student.fin.toString(),
+          total.toString(),
+          status
+        ];
+        tableRows.push(studentData);
+      });
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 50,
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+      });
+      
+      doc.save(`Grades_${selectedCourse?.name?.replace(/\s+/g, '_') || 'Report'}.pdf`);
+      success("PDF generated successfully!");
+    } catch (err) {
+      error("Failed to generate PDF.");
+      console.error(err);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -109,10 +207,12 @@ export default function TeacherGrades() {
               className="form-input" 
               style={{ width: '200px', padding: '0.5rem 1rem' }}
             >
+              {courses.length === 0 && <option value="">No courses assigned</option>}
               {courses.map(course => (
-                <option key={course.id} value={course.id}>{course.name}</option>
+                <option key={course.id} value={course.id}>
+                  {course.name} {course.class ? `(${course.class.name})` : ''}
+                </option>
               ))}
-              {courses.length === 0 && <option value="">No courses available</option>}
             </select>
             
             <select 
@@ -129,9 +229,8 @@ export default function TeacherGrades() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-            <Button variant="outline" style={{ fontWeight: '600' }}><Download size={18} style={{ marginRight: 8 }}/> Export CSV</Button>
-            <Button variant="primary" onClick={handlePublish} style={{ gap: '0.6rem', fontWeight: '700' }}>
-                <Send size={18} /> Publish to Portal
+            <Button variant="outline" onClick={handleDownloadPDF} disabled={filteredStudents.length === 0} style={{ fontWeight: '600' }}>
+              <Download size={18} style={{ marginRight: 8 }}/> Download PDF
             </Button>
         </div>
       </div>

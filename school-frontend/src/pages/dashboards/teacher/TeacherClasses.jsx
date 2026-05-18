@@ -11,7 +11,6 @@ export default function TeacherClasses() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyllabusOpen, setIsSyllabusOpen] = useState(false);
-  const [rosterClass, setRosterClass] = useState(null);
   const fileInputRef = useRef(null);
 
   // Fetch courses from backend on mount so data persists after reload
@@ -63,7 +62,7 @@ export default function TeacherClasses() {
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>{cls.name}</h3>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{cls.classRoom?.room_number || 'N/A'}</span>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{cls.class_room?.name || 'N/A'}</span>
                 </div>
               </div>
 
@@ -82,9 +81,6 @@ export default function TeacherClasses() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
                       <Users size={16}/> {cls.capacity || 0} Max Capacity
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setRosterClass(cls)}>
-                    View Roster
-                  </Button>
               </div>
             </Card>
           ))}
@@ -114,16 +110,7 @@ export default function TeacherClasses() {
         </div>
       </Modal>
 
-      {/* View Roster Modal */}
-      <Modal isOpen={!!rosterClass} onClose={() => setRosterClass(null)} title={`Roster: ${rosterClass?.name || ''}`}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <p style={{ color: 'var(--color-text-muted)' }}>Student enrollment data comes from the backend.</p>
-          <div style={{ padding: '1.5rem', background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-            Capacity: {rosterClass?.capacity || 'N/A'} students
-          </div>
-          <Button variant="outline" onClick={() => setRosterClass(null)}>Close</Button>
-        </div>
-      </Modal>
+      {/* Roster modal removed per user request */}
     </div>
   );
 }

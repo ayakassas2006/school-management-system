@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../ui/PageTransition';
+import { useToast } from '../ui/Toast';
 import {
   LogOut, LayoutDashboard, Users, BookOpen, Calendar, Settings, Bell,
   DollarSign, FileText, BarChart2, MessageSquare, User, CheckSquare,
@@ -89,6 +90,21 @@ export default function DashboardLayout() {
   }, [darkMode]);
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
+  const { success } = useToast();
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      const channel = window.Echo.channel('admin-notifications')
+        .listen('ProgramApplicationSubmitted', (e) => {
+          success(`New application from ${e.parent_name} for ${e.program_id}!`);
+        });
+        
+      return () => {
+        window.Echo.leave('admin-notifications');
+      };
+    }
+  }, [user, success]);
 
   const handleLogout = () => {
     dispatch(logout());
